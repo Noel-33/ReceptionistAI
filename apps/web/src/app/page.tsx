@@ -4,7 +4,7 @@ import { SiteHeader } from "../components/site-header";
 const pillars = [
   {
     title: "Business Portal",
-    body: "Clean onboarding, call records, staff access, billing, and business settings in one focused system.",
+    body: "Clean onboarding, call records, lead capture, staff access, billing, and business settings in one focused system.",
   },
   {
     title: "AI Call Intelligence",
@@ -18,7 +18,7 @@ const pillars = [
 
 const stats = [
   { value: "24/7", label: "call coverage with business-controlled answering rules" },
-  { value: "1", label: "portal for transcripts, recordings, bookings, billing, and admin visibility" },
+  { value: "1", label: "portal for transcripts, recordings, leads, billing, and admin visibility" },
   { value: "Multi", label: "industry flows for clinics, restaurants, salons, legal, and service teams" },
 ];
 
@@ -32,11 +32,11 @@ export default function HomePage() {
             <div className="hero-copy">
               <span className="eyebrow">AI receptionist platform</span>
               <h1 className="display-title">
-                The unified portal for <strong>calls</strong>, bookings, billing, and business control.
+                The unified portal for <strong>calls</strong>, leads, billing, and business control.
               </h1>
               <p className="lead">
                 Build one responsive system where companies configure how AI answers, what it says, which voice it
-                uses, and how every transcript, recording, order, and invoice gets handled after the call.
+                uses, and how every transcript, recording, lead, and invoice gets handled after the call.
               </p>
               <div className="button-row" style={{ marginTop: 28 }}>
                 <Link className="button" href="/signup">
@@ -68,7 +68,7 @@ export default function HomePage() {
                   <small>Plans and invoices</small>
                 </div>
                 <div className="node-card node-d">
-                  <span>Call Logs</span>
+                  <span>Lead Intake</span>
                   <small>Summary and transcript</small>
                 </div>
 
@@ -113,7 +113,7 @@ export default function HomePage() {
             <span className="eyebrow">Get in touch</span>
             <h2 className="contact-title">Talk to the team behind Receptionist AI</h2>
             <p className="contact-subtitle">
-              Built by DeltaPrompt AI — a full-service AI agency helping businesses Stop Waiting and Start Winning with AI.
+              Built by DeltaPrompt AI, a full-service AI agency helping businesses Stop Waiting and Start Winning with AI.
             </p>
           </div>
 

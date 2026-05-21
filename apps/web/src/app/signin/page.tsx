@@ -3,7 +3,7 @@ import { SigninForm } from "../../components/auth/signin-form";
 import { SiteHeader } from "../../components/site-header";
 
 const signInNotes = [
-  "Access business dashboards, call logs, transcripts, and billing in one place.",
+  "Access business dashboards, call logs, transcripts, lead details, and billing in one place.",
   "Support role-based access for owners, managers, staff, and billing admins.",
   "Keep account access ready for future multi-location and admin controls.",
 ];
@@ -17,7 +17,7 @@ export default function SignInPage() {
           <div>
             <span className="eyebrow">Business access</span>
             <h1 className="display-title" style={{ fontSize: "clamp(2.4rem, 4vw, 4.2rem)" }}>
-              Sign in to manage calls, orders, and AI settings.
+              Sign in to manage calls, leads, and AI settings.
             </h1>
             <p className="lead" style={{ color: "rgba(255, 250, 245, 0.76)", maxWidth: 620 }}>
               This screen is the gateway for business users to return to their own secure portal.
