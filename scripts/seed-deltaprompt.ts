@@ -93,13 +93,20 @@ const ANSWERING_RULES = {
     provider:               "TWILIO",
     connectionMode:         "DIRECT_TO_AI",
     businessNumber:         "+1 (437) 214-4761",
+    twilioAccountSid:       "",
+    twilioAuthToken:        "",
     twilioNumber:           "+14372144761",
+    fallbackNumber:         "+1 (437) 214-4761",
+    aiReceptionistEnabled:  true,
     routingMode:            "AI_IMMEDIATELY",
+    aiTakeoverDelaySeconds: 0,
     afterHoursRouting:      "AI",
     handoffEnabled:         true,
+    voicemailFallbackEnabled: true,
     recordingEnabled:       true,
     consentMessage:
       "This call may be recorded and transcribed to ensure we understand your needs and follow up accurately.",
+    postCallSmsEnabled:     false,
   },
 
   // Billing
@@ -107,8 +114,8 @@ const ANSWERING_RULES = {
     planName:               "Growth",
     billingCycle:           "Monthly",
     status:                 "ACTIVE",
-    includedMinutesPerMonth: 500,
-    overageRatePerMinute:   0.35,
+    includedMinutesPerMonth: 750,
+    overageRatePerMinute:   0.30,
   },
 
   // Knowledge base
@@ -325,60 +332,252 @@ const ANSWERING_RULES = {
   },
 };
 
+const DEMO_CALLS = [
+  {
+    status: "ANSWERED_BY_AI",
+    callerName: "Amit Patel",
+    callerNumber: "+1 519-555-0184",
+    callerEmail: "amit@windsorhvac.example",
+    summary:
+      "Qualified a local service-business lead interested in 24/7 AI call handling and WhatsApp automation.",
+    transcript:
+      "AI: Thank you for calling DeltaPrompt AI. How can I help you today?\nCaller: I run a local HVAC company and we miss calls after hours.\nAI: I can help. May I take your name, business name, industry, best phone number, and what problem you want to solve?\nCaller: Amit Patel, Windsor HVAC, home services, 519-555-0184. We need after-hours call capture and appointment requests.\nAI: Perfect. I will send this to the DeltaPrompt AI team so they can follow up with a strategy call.",
+    recordingUrl: "https://example.com/recordings/deltaprompt-demo-lead-1",
+    startedOffsetMinutes: 34,
+    durationMinutes: 6,
+  },
+  {
+    status: "ANSWERED_BY_AI",
+    callerName: "Priya Sharma",
+    callerNumber: "+1 226-555-0139",
+    callerEmail: "priya@salonstudio.example",
+    summary:
+      "Captured a demo request from a salon owner asking about AI appointment intake and social media support.",
+    transcript:
+      "AI: Thanks for calling DeltaPrompt AI. Are you looking for AI call handling, automation, marketing, or a custom AI application?\nCaller: I own a salon and want appointments handled when my staff are busy. I also need help with Instagram.\nAI: I can capture that. What is your business name and the best number for the team?\nCaller: Priya Sharma, Glow Salon Studio, 226-555-0139.\nAI: Great. I will have the team reach out with a demo and strategy-call options.",
+    recordingUrl: "https://example.com/recordings/deltaprompt-demo-lead-2",
+    startedOffsetMinutes: 118,
+    durationMinutes: 5,
+  },
+  {
+    status: "ESCALATED",
+    callerName: "Daniel Brooks",
+    callerNumber: "+1 437-555-0168",
+    callerEmail: "daniel@retailops.example",
+    summary:
+      "After-hours caller asked about a custom inventory and CRM workflow; AI captured details for next-business-day follow-up.",
+    transcript:
+      "AI: You have reached DeltaPrompt AI outside regular office hours. I can still take your details for the team.\nCaller: We need a custom AI inventory system and maybe a CRM pipeline.\nAI: Absolutely. May I take your name, business name, industry, phone number, and what you want to build?\nCaller: Daniel Brooks, RetailOps North, retail, 437-555-0168. We want inventory alerts and automated lead follow-up.\nAI: I have captured that. The team will follow up on the next business day.",
+    recordingUrl: "https://example.com/recordings/deltaprompt-demo-lead-3",
+    startedOffsetMinutes: 246,
+    durationMinutes: 7,
+  },
+];
+
+function readRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function preferSavedString(value: unknown, fallback: string) {
+  const saved = String(value ?? "").trim();
+  return saved || fallback;
+}
+
+function preferSavedNumber(value: unknown, fallback: number) {
+  const saved = Number(value);
+  return Number.isFinite(saved) ? saved : fallback;
+}
+
+function preferSavedBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function buildAnsweringRules(previousAnsweringRules: unknown) {
+  const previousRules = readRecord(previousAnsweringRules);
+  const previousTelephony = readRecord(previousRules.telephony);
+  const previousBilling = readRecord(previousRules.billing);
+
+  return {
+    ...ANSWERING_RULES,
+    telephony: {
+      ...ANSWERING_RULES.telephony,
+      businessNumber: preferSavedString(previousTelephony.businessNumber, ANSWERING_RULES.telephony.businessNumber),
+      twilioAccountSid: preferSavedString(previousTelephony.twilioAccountSid, ANSWERING_RULES.telephony.twilioAccountSid),
+      twilioAuthToken: preferSavedString(previousTelephony.twilioAuthToken, ANSWERING_RULES.telephony.twilioAuthToken),
+      twilioNumber: preferSavedString(previousTelephony.twilioNumber, ANSWERING_RULES.telephony.twilioNumber),
+      fallbackNumber: preferSavedString(previousTelephony.fallbackNumber, ANSWERING_RULES.telephony.fallbackNumber),
+      aiReceptionistEnabled: preferSavedBoolean(
+        previousTelephony.aiReceptionistEnabled,
+        ANSWERING_RULES.telephony.aiReceptionistEnabled,
+      ),
+      routingMode: preferSavedString(previousTelephony.routingMode, ANSWERING_RULES.telephony.routingMode),
+      aiTakeoverDelaySeconds: preferSavedNumber(
+        previousTelephony.aiTakeoverDelaySeconds,
+        ANSWERING_RULES.telephony.aiTakeoverDelaySeconds,
+      ),
+      afterHoursRouting: preferSavedString(previousTelephony.afterHoursRouting, ANSWERING_RULES.telephony.afterHoursRouting),
+      handoffEnabled: preferSavedBoolean(previousTelephony.handoffEnabled, ANSWERING_RULES.telephony.handoffEnabled),
+      voicemailFallbackEnabled: preferSavedBoolean(
+        previousTelephony.voicemailFallbackEnabled,
+        ANSWERING_RULES.telephony.voicemailFallbackEnabled,
+      ),
+      recordingEnabled: preferSavedBoolean(previousTelephony.recordingEnabled, ANSWERING_RULES.telephony.recordingEnabled),
+      consentMessage: preferSavedString(previousTelephony.consentMessage, ANSWERING_RULES.telephony.consentMessage),
+      postCallSmsEnabled: preferSavedBoolean(
+        previousTelephony.postCallSmsEnabled,
+        ANSWERING_RULES.telephony.postCallSmsEnabled,
+      ),
+    },
+    billing: {
+      ...ANSWERING_RULES.billing,
+      planName: preferSavedString(previousBilling.planName, ANSWERING_RULES.billing.planName),
+      billingCycle: preferSavedString(previousBilling.billingCycle, ANSWERING_RULES.billing.billingCycle),
+      status: preferSavedString(previousBilling.status, ANSWERING_RULES.billing.status),
+      includedMinutesPerMonth: preferSavedNumber(
+        previousBilling.includedMinutesPerMonth,
+        ANSWERING_RULES.billing.includedMinutesPerMonth,
+      ),
+      overageRatePerMinute: preferSavedNumber(
+        previousBilling.overageRatePerMinute,
+        ANSWERING_RULES.billing.overageRatePerMinute,
+      ),
+    },
+  };
+}
+
+async function ensureDeltaPromptDemoCalls(businessId: string) {
+  const existingCallCount = await prisma.call.count({
+    where: { businessId },
+  });
+
+  if (existingCallCount > 0) {
+    return false;
+  }
+
+  await prisma.call.createMany({
+    data: DEMO_CALLS.map((call) => {
+      const startedAt = new Date(Date.now() - call.startedOffsetMinutes * 60 * 1000);
+      const endedAt = new Date(startedAt.getTime() + call.durationMinutes * 60 * 1000);
+
+      return {
+        businessId,
+        status: call.status as "ANSWERED_BY_AI" | "ESCALATED",
+        callerName: call.callerName,
+        callerNumber: call.callerNumber,
+        callerEmail: call.callerEmail,
+        summary: call.summary,
+        transcript: call.transcript,
+        recordingUrl: call.recordingUrl,
+        startedAt,
+        endedAt,
+      };
+    }),
+  });
+
+  return true;
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
   console.log("🚀 Seeding DeltaPrompt AI business account...\n");
 
-  // Check if already exists
-  const existing = await prisma.user.findUnique({ where: { email: DELTAPROMPT_EMAIL } });
-  if (existing) {
-    console.log(`⚠️  Account with email ${DELTAPROMPT_EMAIL} already exists. Skipping creation.`);
-    console.log("   If you want to re-seed, delete the existing record from the database first.\n");
-    return;
-  }
+  const existingUser = await prisma.user.findUnique({
+    where: { email: DELTAPROMPT_EMAIL },
+  });
 
-  // Create user + business in a transaction
+  const existingBusiness = await prisma.business.findFirst({
+    where: {
+      OR: [{ email: DELTAPROMPT_EMAIL }, { name: BUSINESS_CONFIG.name }],
+    },
+  });
+
   const result = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email:        DELTAPROMPT_EMAIL,
-        fullName:     DELTAPROMPT_FULLNAME,
-        passwordHash: hashPassword(DELTAPROMPT_PASSWORD),
-        role:         "BUSINESS_OWNER",
-      },
-    });
+    const user = existingUser
+      ? await tx.user.update({
+          where: { id: existingUser.id },
+          data: {
+            fullName:     DELTAPROMPT_FULLNAME,
+            passwordHash: hashPassword(DELTAPROMPT_PASSWORD),
+            role:         "BUSINESS_OWNER",
+          },
+        })
+      : await tx.user.create({
+          data: {
+            email:        DELTAPROMPT_EMAIL,
+            fullName:     DELTAPROMPT_FULLNAME,
+            passwordHash: hashPassword(DELTAPROMPT_PASSWORD),
+            role:         "BUSINESS_OWNER",
+          },
+        });
 
-    const business = await tx.business.create({
-      data: {
-        name:               BUSINESS_CONFIG.name,
-        category:           "OTHER",
-        email:              BUSINESS_CONFIG.email,
-        phoneNumber:        BUSINESS_CONFIG.phoneNumber,
-        address:            BUSINESS_CONFIG.address,
-        timezone:           BUSINESS_CONFIG.timezone,
-        description:        BUSINESS_CONFIG.description,
-        servicesSummary:    BUSINESS_CONFIG.servicesSummary,
-        priceListSummary:   BUSINESS_CONFIG.priceListSummary,
-        greetingMessage:    BUSINESS_CONFIG.greetingMessage,
-        voicePreference:    BUSINESS_CONFIG.voicePreference,
-        selectedPlan:       BUSINESS_CONFIG.selectedPlan,
-        billingCycle:       BUSINESS_CONFIG.billingCycle,
-        aiEnabled:          BUSINESS_CONFIG.aiEnabled,
-        onboardingCompleted: BUSINESS_CONFIG.onboardingCompleted,
-        officeHours:        OFFICE_HOURS,
-        answeringRules:     ANSWERING_RULES,
-        members: {
-          create: {
+    const businessData = {
+      name:                BUSINESS_CONFIG.name,
+      category:            BUSINESS_CONFIG.category,
+      email:               BUSINESS_CONFIG.email,
+      phoneNumber:         BUSINESS_CONFIG.phoneNumber,
+      address:             BUSINESS_CONFIG.address,
+      timezone:            BUSINESS_CONFIG.timezone,
+      description:         BUSINESS_CONFIG.description,
+      servicesSummary:     BUSINESS_CONFIG.servicesSummary,
+      priceListSummary:    BUSINESS_CONFIG.priceListSummary,
+      greetingMessage:     BUSINESS_CONFIG.greetingMessage,
+      voicePreference:     BUSINESS_CONFIG.voicePreference,
+      selectedPlan:        BUSINESS_CONFIG.selectedPlan,
+      billingCycle:        BUSINESS_CONFIG.billingCycle,
+      aiEnabled:           BUSINESS_CONFIG.aiEnabled,
+      onboardingCompleted: BUSINESS_CONFIG.onboardingCompleted,
+      medicalModeEnabled:  false,
+      officeHours:         OFFICE_HOURS,
+      answeringRules:      buildAnsweringRules(existingBusiness?.answeringRules),
+    };
+
+    const business = existingBusiness
+      ? await tx.business.update({
+          where: { id: existingBusiness.id },
+          data: businessData,
+        })
+      : await tx.business.create({
+          data: {
+            ...businessData,
+            members: {
+              create: {
+                userId: user.id,
+                role:   "BUSINESS_OWNER",
+              },
+            },
+          },
+        });
+
+    if (existingBusiness) {
+      await tx.businessMember.upsert({
+        where: {
+          businessId_userId: {
+            businessId: business.id,
             userId: user.id,
-            role:   "BUSINESS_OWNER",
           },
         },
-      },
-    });
+        update: {
+          role: "BUSINESS_OWNER",
+        },
+        create: {
+          businessId: business.id,
+          userId: user.id,
+          role: "BUSINESS_OWNER",
+        },
+      });
+    }
 
-    await tx.subscription.create({
-      data: {
+    await tx.subscription.upsert({
+      where: {
+        businessId: business.id,
+      },
+      update: {
+        planName:   "Growth",
+        status:     "ACTIVE",
+        renewsAt:   new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+      create: {
         businessId: business.id,
         planName:   "Growth",
         status:     "ACTIVE",
@@ -386,10 +585,17 @@ async function main() {
       },
     });
 
-    return { user, business };
+    return {
+      user,
+      business,
+      createdUser: !existingUser,
+      createdBusiness: !existingBusiness,
+    };
   });
 
-  console.log("✅ DeltaPrompt AI account created successfully!\n");
+  const demoCallsCreated = await ensureDeltaPromptDemoCalls(result.business.id);
+
+  console.log(`✅ DeltaPrompt AI account ${result.createdBusiness ? "created" : "updated"} successfully!\n`);
   console.log("─────────────────────────────────────────────");
   console.log(`  Business Name : ${result.business.name}`);
   console.log(`  Business ID   : ${result.business.id}`);
@@ -399,6 +605,7 @@ async function main() {
   console.log("─────────────────────────────────────────────");
   console.log("\n⚠️  Please change the password after your first login.\n");
   console.log("📋 What's pre-configured:");
+  console.log(`   ✓ ${result.createdUser ? "New" : "Existing"} owner user with the requested login credentials`);
   console.log("   ✓ Business profile (name, phone, address, hours, description)");
   console.log("   ✓ AI settings (enabled, voice, greeting, call mode)");
   console.log("   ✓ Conversation goal: CAPTURE_LEADS");
@@ -409,9 +616,10 @@ async function main() {
   console.log("   ✓ 5-step lead capture flow");
   console.log("   ✓ After-hours message");
   console.log("   ✓ Billing: Growth plan, Active\n");
+  console.log(`   ${demoCallsCreated ? "✓" : "•"} DeltaPrompt demo call logs ${demoCallsCreated ? "created" : "already existed, left untouched"}\n`);
   console.log("🔧 Still needed:");
-  console.log("   • Add Twilio credentials in Telephony settings");
-  console.log("   • Add your Twilio phone number (+14372144761)");
+  console.log("   • Add or confirm Twilio credentials in Telephony settings");
+  console.log("   • Add your own Twilio phone number if you are testing with a new Twilio account");
   console.log("   • Review and adjust knowledge base content in the portal");
   console.log("   • Set up Resend email for call summaries\n");
 }
