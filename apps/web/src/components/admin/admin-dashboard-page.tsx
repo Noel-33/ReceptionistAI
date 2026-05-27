@@ -34,11 +34,73 @@ type AdminBusiness = {
     fullName: string;
     role: string;
   }>;
+  appointments?: AppointmentItem[];
+  appointmentsConfigured?: boolean;
+  calendarIntegration?: CalendarIntegration;
   createdAt: string;
 };
 
 type AdminOverviewResponse = {
   businesses: AdminBusiness[];
+};
+
+type AppointmentStatus = "CONFIRMED" | "PENDING" | "COMPLETED" | "CANCELED";
+type AppointmentSource = "AI_BOOKED" | "MANUAL" | "MICROSOFT_SYNC";
+type AppointmentAccent = "blue" | "green" | "red";
+
+type AppointmentItem = {
+  id: string;
+  title: string;
+  startsAt: string;
+  durationMinutes: number;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  serviceType: string;
+  status: AppointmentStatus;
+  notes: string;
+  source: AppointmentSource;
+  accent: AppointmentAccent;
+};
+
+type CalendarIntegration = {
+  provider: "MICROSOFT_OUTLOOK";
+  connected: boolean;
+  connectedEmail: string;
+  connectedAt: string;
+  syncAppointments: boolean;
+  respectBusyTimes: boolean;
+};
+
+type AppointmentsResponse = {
+  message: string;
+  appointments: AppointmentItem[];
+};
+
+type CalendarIntegrationResponse = {
+  message: string;
+  calendarIntegration: CalendarIntegration;
+};
+
+const ADMIN_WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const ADMIN_DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
+const ADMIN_INITIAL_MONTH = new Date(2026, 4, 1);
+const ADMIN_TODAY = new Date(2026, 4, 27);
+
+const ADMIN_STATUS_LABELS: Record<AppointmentStatus, string> = {
+  CONFIRMED: "Confirmed",
+  PENDING: "Pending",
+  COMPLETED: "Completed",
+  CANCELED: "Canceled",
+};
+
+const ADMIN_DEFAULT_CALENDAR: CalendarIntegration = {
+  provider: "MICROSOFT_OUTLOOK",
+  connected: true,
+  connectedEmail: "vishant@vivratech.ca",
+  connectedAt: "2026-05-20T10:00:00",
+  syncAppointments: true,
+  respectBusyTimes: true,
 };
 
 function formatAdminDate(value: string) {
@@ -59,6 +121,204 @@ function statusLabel(value: string) {
   return value.replaceAll("_", " ");
 }
 
+function adminUid() {
+  return typeof crypto !== "undefined" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+}
+
+function adminPad(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function adminDateKey(date: Date) {
+  return `${date.getFullYear()}-${adminPad(date.getMonth() + 1)}-${adminPad(date.getDate())}`;
+}
+
+function parseAdminDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function toAdminInputDateTime(value: string) {
+  const date = parseAdminDate(value);
+  return `${date.getFullYear()}-${adminPad(date.getMonth() + 1)}-${adminPad(date.getDate())}T${adminPad(date.getHours())}:${adminPad(date.getMinutes())}`;
+}
+
+function fromAdminInputDateTime(value: string) {
+  return value.length === 16 ? `${value}:00` : value;
+}
+
+function formatAdminMonthTitle(date: Date) {
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(date);
+}
+
+function formatAdminEventTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parseAdminDate(value));
+}
+
+function formatAdminAppointmentTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parseAdminDate(value));
+}
+
+function buildAdminMonthCells(month: Date) {
+  const firstOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
+  const gridStart = new Date(firstOfMonth);
+  gridStart.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+    return date;
+  });
+}
+
+function buildAdminDefaultAppointments(businessName: string): AppointmentItem[] {
+  return [
+    {
+      id: "admin-demo-jenex",
+      title: "Jenex discovery call",
+      startsAt: "2026-05-19T07:30:00",
+      durationMinutes: 30,
+      customerName: "Jenex",
+      customerPhone: "519-555-0171",
+      customerEmail: "",
+      serviceType: "AI Receptionist Demo",
+      status: "CONFIRMED",
+      notes: `Business: ${businessName}. Discovery call booked by the AI receptionist.`,
+      source: "AI_BOOKED",
+      accent: "green",
+    },
+    {
+      id: "admin-demo-abc",
+      title: "ABC lead review",
+      startsAt: "2026-05-19T08:00:00",
+      durationMinutes: 30,
+      customerName: "ABC Services",
+      customerPhone: "416-555-0188",
+      customerEmail: "",
+      serviceType: "Lead Qualification",
+      status: "CONFIRMED",
+      notes: `Business: ${businessName}. Lead asked about after-hours call answering.`,
+      source: "AI_BOOKED",
+      accent: "green",
+    },
+    {
+      id: "admin-demo-canceled",
+      title: "Call with canceled lead",
+      startsAt: "2026-05-19T08:30:00",
+      durationMinutes: 30,
+      customerName: "Canceled lead",
+      customerPhone: "905-555-0136",
+      customerEmail: "",
+      serviceType: "General Consultation",
+      status: "CANCELED",
+      notes: "Caller requested to move this call to next week.",
+      source: "MANUAL",
+      accent: "red",
+    },
+    {
+      id: "admin-demo-ai-strategy",
+      title: "AI strategy session",
+      startsAt: "2026-05-20T07:00:00",
+      durationMinutes: 45,
+      customerName: "Strategy lead",
+      customerPhone: "647-555-0142",
+      customerEmail: "",
+      serviceType: "AI Strategy",
+      status: "CONFIRMED",
+      notes: `Business: ${businessName}. Caller wants to discuss AI automation opportunities.`,
+      source: "AI_BOOKED",
+      accent: "blue",
+    },
+    {
+      id: "admin-demo-vishant",
+      title: "Call with Vishant",
+      startsAt: "2026-05-20T10:00:00",
+      durationMinutes: 30,
+      customerName: "Vishant Bhatia",
+      customerPhone: "905-781-7529",
+      customerEmail: "",
+      serviceType: "General Consultation",
+      status: "CONFIRMED",
+      notes: `Business: ${businessName}. Appointment for a general consultation.`,
+      source: "AI_BOOKED",
+      accent: "green",
+    },
+    {
+      id: "admin-demo-call-review",
+      title: "Call review",
+      startsAt: "2026-05-20T11:00:00",
+      durationMinutes: 30,
+      customerName: "DeltaPrompt prospect",
+      customerPhone: "289-555-0125",
+      customerEmail: "",
+      serviceType: "AI Receptionist Demo",
+      status: "CONFIRMED",
+      notes: "Review caller needs and confirm next steps.",
+      source: "AI_BOOKED",
+      accent: "blue",
+    },
+    {
+      id: "admin-demo-call-21",
+      title: "Call with service lead",
+      startsAt: "2026-05-21T07:00:00",
+      durationMinutes: 30,
+      customerName: "Service lead",
+      customerPhone: "437-555-0199",
+      customerEmail: "",
+      serviceType: "General Consultation",
+      status: "CONFIRMED",
+      notes: "Lead asked about connecting Twilio to AI call handling.",
+      source: "AI_BOOKED",
+      accent: "blue",
+    },
+    {
+      id: "admin-demo-call-25",
+      title: "Call with morning lead",
+      startsAt: "2026-05-25T06:00:00",
+      durationMinutes: 30,
+      customerName: "Morning lead",
+      customerPhone: "905-555-0104",
+      customerEmail: "",
+      serviceType: "General Consultation",
+      status: "CONFIRMED",
+      notes: "Early consultation request captured by the receptionist.",
+      source: "AI_BOOKED",
+      accent: "blue",
+    },
+  ];
+}
+
+function emptyAdminAppointment(businessName: string, startsAt = "2026-05-27T09:00:00"): AppointmentItem {
+  return {
+    id: adminUid(),
+    title: "New consultation",
+    startsAt,
+    durationMinutes: 30,
+    customerName: "",
+    customerPhone: "",
+    customerEmail: "",
+    serviceType: "General Consultation",
+    status: "CONFIRMED",
+    notes: `Business: ${businessName}. Appointment for a general consultation.`,
+    source: "MANUAL",
+    accent: "blue",
+  };
+}
+
+function resolveAdminCalendarIntegration(calendar?: CalendarIntegration) {
+  if (calendar && (calendar.connected || calendar.connectedEmail || calendar.connectedAt)) {
+    return calendar;
+  }
+
+  return ADMIN_DEFAULT_CALENDAR;
+}
+
 export function AdminDashboardPage() {
   const [session, setSession] = useState<ReturnType<typeof getSession>>(null);
   const [data, setData] = useState<AdminOverviewResponse | null>(null);
@@ -70,6 +330,16 @@ export function AdminDashboardPage() {
   const [billingSuccess, setBillingSuccess] = useState("");
   const [passwordResetSuccess, setPasswordResetSuccess] = useState("");
   const [passwordDraftEmail, setPasswordDraftEmail] = useState("");
+  const [adminVisibleMonth, setAdminVisibleMonth] = useState(ADMIN_INITIAL_MONTH);
+  const [adminAppointmentView, setAdminAppointmentView] = useState<"month" | "list">("month");
+  const [adminAppointments, setAdminAppointments] = useState<AppointmentItem[]>([]);
+  const [activeAppointment, setActiveAppointment] = useState<AppointmentItem | null>(null);
+  const [isCreatingAppointment, setIsCreatingAppointment] = useState(false);
+  const [savingAppointments, setSavingAppointments] = useState(false);
+  const [appointmentSuccess, setAppointmentSuccess] = useState("");
+  const [appointmentError, setAppointmentError] = useState("");
+  const [savingCalendar, setSavingCalendar] = useState(false);
+  const [calendarSuccess, setCalendarSuccess] = useState("");
 
   useEffect(() => {
     setSession(getSession());
@@ -112,6 +382,25 @@ export function AdminDashboardPage() {
     setPasswordDraftEmail(selectedBusiness?.ownerEmail || "");
   }, [selectedBusiness?.id, selectedBusiness?.ownerEmail]);
 
+  useEffect(() => {
+    if (!selectedBusiness) {
+      setAdminAppointments([]);
+      return;
+    }
+
+    const nextAppointments = selectedBusiness.appointmentsConfigured
+      ? selectedBusiness.appointments ?? []
+      : buildAdminDefaultAppointments(selectedBusiness.name);
+
+    setAdminAppointments(nextAppointments);
+    setAdminVisibleMonth(ADMIN_INITIAL_MONTH);
+    setAdminAppointmentView("month");
+    setActiveAppointment(null);
+    setAppointmentSuccess("");
+    setAppointmentError("");
+    setCalendarSuccess("");
+  }, [selectedBusiness?.id, selectedBusiness?.name]);
+
   const billingFormKey = selectedBusiness
     ? [
         selectedBusiness.id,
@@ -131,6 +420,26 @@ export function AdminDashboardPage() {
     selectedBusiness && selectedBusiness.includedMinutes > 0
       ? Math.min(100, Math.round((selectedBusiness.usedMinutes / selectedBusiness.includedMinutes) * 100))
       : 0;
+
+  const adminCalendarIntegration = selectedBusiness
+    ? resolveAdminCalendarIntegration(selectedBusiness.calendarIntegration)
+    : ADMIN_DEFAULT_CALENDAR;
+
+  const adminCalendarCells = useMemo(() => buildAdminMonthCells(adminVisibleMonth), [adminVisibleMonth]);
+  const adminEventsByDay = useMemo(() => {
+    return adminAppointments.reduce<Record<string, AppointmentItem[]>>((acc, appointment) => {
+      const key = adminDateKey(parseAdminDate(appointment.startsAt));
+      acc[key] = [...(acc[key] ?? []), appointment].sort(
+        (a, b) => parseAdminDate(a.startsAt).getTime() - parseAdminDate(b.startsAt).getTime(),
+      );
+      return acc;
+    }, {});
+  }, [adminAppointments]);
+
+  const sortedAdminAppointments = useMemo(
+    () => [...adminAppointments].sort((a, b) => parseAdminDate(a.startsAt).getTime() - parseAdminDate(b.startsAt).getTime()),
+    [adminAppointments],
+  );
 
   async function onSubmitBilling(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -196,6 +505,133 @@ export function AdminDashboardPage() {
     } finally {
       setResettingPassword(false);
     }
+  }
+
+  function moveAdminMonth(delta: number) {
+    setAdminVisibleMonth(new Date(adminVisibleMonth.getFullYear(), adminVisibleMonth.getMonth() + delta, 1));
+  }
+
+  function openAdminNewAppointment(startsAt?: string) {
+    if (!selectedBusiness) {
+      return;
+    }
+
+    setAppointmentError("");
+    setAppointmentSuccess("");
+    setIsCreatingAppointment(true);
+    setActiveAppointment(emptyAdminAppointment(selectedBusiness.name, startsAt));
+  }
+
+  function openAdminEditAppointment(appointment: AppointmentItem) {
+    setAppointmentError("");
+    setAppointmentSuccess("");
+    setIsCreatingAppointment(false);
+    setActiveAppointment({ ...appointment });
+  }
+
+  async function persistAdminAppointments(nextAppointments: AppointmentItem[], message: string) {
+    if (!selectedBusiness) {
+      return;
+    }
+
+    setSavingAppointments(true);
+    setAppointmentError("");
+    setAppointmentSuccess("");
+
+    try {
+      const response = await apiRequest<AppointmentsResponse>(`/api/businesses/${selectedBusiness.id}/appointments`, {
+        method: "PATCH",
+        body: { appointments: nextAppointments },
+      });
+      setAdminAppointments(response.appointments ?? nextAppointments);
+      setAppointmentSuccess(response.message || message);
+      setActiveAppointment(null);
+      await loadOverview();
+    } catch (requestError) {
+      setAppointmentError(requestError instanceof Error ? requestError.message : "Unable to save appointments.");
+    } finally {
+      setSavingAppointments(false);
+    }
+  }
+
+  function saveActiveAdminAppointment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!activeAppointment) {
+      return;
+    }
+
+    if (!activeAppointment.title.trim()) {
+      setAppointmentError("Appointment title is required.");
+      return;
+    }
+
+    const normalizedAppointment: AppointmentItem = {
+      ...activeAppointment,
+      title: activeAppointment.title.trim(),
+      customerName: activeAppointment.customerName.trim(),
+      customerPhone: activeAppointment.customerPhone.trim(),
+      customerEmail: activeAppointment.customerEmail.trim(),
+      serviceType: activeAppointment.serviceType.trim(),
+      notes: activeAppointment.notes.trim(),
+      accent: activeAppointment.status === "CANCELED" ? "red" : activeAppointment.accent,
+    };
+
+    const nextAppointments = isCreatingAppointment
+      ? [...adminAppointments, normalizedAppointment]
+      : adminAppointments.map((appointment) => (appointment.id === normalizedAppointment.id ? normalizedAppointment : appointment));
+
+    void persistAdminAppointments(nextAppointments, "Appointment saved.");
+  }
+
+  function deleteActiveAdminAppointment() {
+    if (!activeAppointment || isCreatingAppointment) {
+      return;
+    }
+
+    const nextAppointments = adminAppointments.filter((appointment) => appointment.id !== activeAppointment.id);
+    void persistAdminAppointments(nextAppointments, "Appointment removed.");
+  }
+
+  async function saveAdminCalendarIntegration(nextIntegration: CalendarIntegration) {
+    if (!selectedBusiness) {
+      return;
+    }
+
+    setSavingCalendar(true);
+    setError("");
+    setCalendarSuccess("");
+
+    try {
+      const response = await apiRequest<CalendarIntegrationResponse>(`/api/businesses/${selectedBusiness.id}/calendar-integration`, {
+        method: "PATCH",
+        body: nextIntegration,
+      });
+      setCalendarSuccess(response.message);
+      await loadOverview();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to update calendar integration.");
+    } finally {
+      setSavingCalendar(false);
+    }
+  }
+
+  function connectAdminCalendar() {
+    void saveAdminCalendarIntegration({
+      ...adminCalendarIntegration,
+      connected: true,
+      connectedEmail: adminCalendarIntegration.connectedEmail || "vishant@vivratech.ca",
+      connectedAt: new Date().toISOString(),
+      syncAppointments: true,
+      respectBusyTimes: true,
+    });
+  }
+
+  function disconnectAdminCalendar() {
+    void saveAdminCalendarIntegration({
+      ...adminCalendarIntegration,
+      connected: false,
+    });
   }
 
   if (session === null) {
@@ -339,6 +775,153 @@ export function AdminDashboardPage() {
                       <p className="lead admin-stat-copy">Minutes over the limit</p>
                     </div>
                   </div>
+                </section>
+
+                <section className="surface-card stack-md admin-panel-card admin-calendar-panel">
+                  <div className="admin-calendar-head">
+                    <div className="page-intro admin-page-intro compact">
+                      <span className="eyebrow">Appointments</span>
+                      <h2 className="section-title admin-section-title">Business calendar</h2>
+                      <p className="lead admin-lead">
+                        Review, create, and edit appointments for {selectedBusiness.name} without switching portals.
+                      </p>
+                    </div>
+
+                    <div className="admin-calendar-sync-card">
+                      <div>
+                        <span className="eyebrow">Calendar Sync</span>
+                        <h3>Microsoft Outlook</h3>
+                        <p>
+                          {adminCalendarIntegration.connected ? (
+                            <>Connected as <strong>{adminCalendarIntegration.connectedEmail || "vishant@vivratech.ca"}</strong></>
+                          ) : (
+                            "Not connected"
+                          )}
+                        </p>
+                      </div>
+                      {adminCalendarIntegration.connected ? (
+                        <button className="button-secondary" disabled={savingCalendar} onClick={disconnectAdminCalendar} type="button">
+                          {savingCalendar ? "Saving..." : "Disconnect"}
+                        </button>
+                      ) : (
+                        <button className="button" disabled={savingCalendar} onClick={connectAdminCalendar} type="button">
+                          {savingCalendar ? "Saving..." : "Connect"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {calendarSuccess ? <div className="status-banner success">{calendarSuccess}</div> : null}
+                  {appointmentSuccess ? <div className="status-banner success">{appointmentSuccess}</div> : null}
+                  {appointmentError ? <div className="status-banner error">{appointmentError}</div> : null}
+
+                  <div className="calendar-toolbar admin-calendar-toolbar">
+                    <div className="calendar-toolbar-left">
+                      <button className="icon-button" type="button" onClick={() => moveAdminMonth(-1)} aria-label="Previous month">
+                        ‹
+                      </button>
+                      <h2>{formatAdminMonthTitle(adminVisibleMonth)}</h2>
+                      <button className="icon-button" type="button" onClick={() => moveAdminMonth(1)} aria-label="Next month">
+                        ›
+                      </button>
+                      <button
+                        className="button-secondary calendar-today-button"
+                        type="button"
+                        onClick={() => setAdminVisibleMonth(new Date(ADMIN_TODAY.getFullYear(), ADMIN_TODAY.getMonth(), 1))}
+                      >
+                        Today
+                      </button>
+                    </div>
+
+                    <div className="calendar-toolbar-right">
+                      <div className="segmented-control" aria-label="Admin appointment view">
+                        <button
+                          className={adminAppointmentView === "month" ? "active" : ""}
+                          type="button"
+                          onClick={() => setAdminAppointmentView("month")}
+                        >
+                          Month
+                        </button>
+                        <button
+                          className={adminAppointmentView === "list" ? "active" : ""}
+                          type="button"
+                          onClick={() => setAdminAppointmentView("list")}
+                        >
+                          List
+                        </button>
+                      </div>
+                      <button className="button calendar-new-button" type="button" onClick={() => openAdminNewAppointment()}>
+                        + New Appointment
+                      </button>
+                    </div>
+                  </div>
+
+                  {adminAppointmentView === "month" ? (
+                    <section className="appointment-calendar admin-appointment-calendar" aria-label="Admin appointment calendar">
+                      <div className="calendar-weekdays">
+                        {ADMIN_WEEKDAYS.map((weekday) => (
+                          <div key={weekday}>{weekday}</div>
+                        ))}
+                      </div>
+                      <div className="calendar-grid">
+                        {adminCalendarCells.map((cellDate) => {
+                          const key = adminDateKey(cellDate);
+                          const isOutsideMonth = cellDate.getMonth() !== adminVisibleMonth.getMonth();
+                          const isToday = key === adminDateKey(ADMIN_TODAY);
+                          const dayEvents = adminEventsByDay[key] ?? [];
+
+                          return (
+                            <div key={key} className={`calendar-day${isOutsideMonth ? " muted-day" : ""}`}>
+                              <button
+                                className={`calendar-day-number${isToday ? " today" : ""}`}
+                                type="button"
+                                onClick={() => openAdminNewAppointment(`${key}T09:00:00`)}
+                                aria-label={`Create appointment on ${key}`}
+                              >
+                                {cellDate.getDate()}
+                              </button>
+                              <div className="calendar-events">
+                                {dayEvents.map((appointment) => (
+                                  <button
+                                    key={appointment.id}
+                                    className={`calendar-event-pill ${appointment.status === "CANCELED" ? "red canceled" : appointment.accent}`}
+                                    type="button"
+                                    onClick={() => openAdminEditAppointment(appointment)}
+                                    title={`${formatAdminEventTime(appointment.startsAt)} ${appointment.title}`}
+                                  >
+                                    <span>{formatAdminEventTime(appointment.startsAt)}</span>
+                                    <strong>{appointment.title}</strong>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : (
+                    <section className="appointments-list">
+                      {sortedAdminAppointments.map((appointment) => (
+                        <article key={appointment.id} className="appointment-list-card">
+                          <div>
+                            <span className={`appointment-status ${appointment.status.toLowerCase()}`}>
+                              {ADMIN_STATUS_LABELS[appointment.status]}
+                            </span>
+                            <h3>{appointment.title}</h3>
+                            <p>{formatAdminAppointmentTime(appointment.startsAt)} - {appointment.durationMinutes} min</p>
+                          </div>
+                          <div>
+                            <strong>{appointment.customerName || "No customer name"}</strong>
+                            <span>{appointment.customerPhone || "No phone captured"}</span>
+                            <span>{appointment.serviceType || "General Consultation"}</span>
+                          </div>
+                          <button className="button-secondary" type="button" onClick={() => openAdminEditAppointment(appointment)}>
+                            Edit
+                          </button>
+                        </article>
+                      ))}
+                    </section>
+                  )}
                 </section>
 
                 <section className="grid-2 admin-detail-grid">
@@ -510,6 +1093,162 @@ export function AdminDashboardPage() {
         ) : null}
 
         <PasswordChangeForm email={session.admin.email} eyebrow="Admin security" title="Change admin password" />
+
+        {activeAppointment ? (
+          <div className="modal-backdrop" role="presentation">
+            <form className="appointment-modal" onSubmit={saveActiveAdminAppointment}>
+              <div className="appointment-modal-header">
+                <h2>{isCreatingAppointment ? "New appointment" : "Edit appointment"}</h2>
+                <button className="modal-close" type="button" onClick={() => setActiveAppointment(null)} aria-label="Close appointment editor">
+                  ×
+                </button>
+              </div>
+
+              <div className="appointment-modal-body">
+                <div className="form-group appointment-field-full">
+                  <label className="form-label" htmlFor="admin-appointment-title">Title *</label>
+                  <input
+                    id="admin-appointment-title"
+                    className="form-input"
+                    value={activeAppointment.title}
+                    onChange={(event) => setActiveAppointment({ ...activeAppointment, title: event.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="appointment-form-grid">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="admin-appointment-start">Date &amp; Time *</label>
+                    <input
+                      id="admin-appointment-start"
+                      className="form-input"
+                      type="datetime-local"
+                      value={toAdminInputDateTime(activeAppointment.startsAt)}
+                      onChange={(event) => setActiveAppointment({ ...activeAppointment, startsAt: fromAdminInputDateTime(event.target.value) })}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Duration (min)</label>
+                    <div className="duration-options">
+                      {ADMIN_DURATION_OPTIONS.map((duration) => (
+                        <button
+                          key={duration}
+                          className={`duration-chip${activeAppointment.durationMinutes === duration ? " active" : ""}`}
+                          type="button"
+                          onClick={() => setActiveAppointment({ ...activeAppointment, durationMinutes: duration })}
+                        >
+                          {duration}
+                        </button>
+                      ))}
+                      <input
+                        className="duration-input"
+                        min={5}
+                        max={480}
+                        type="number"
+                        value={activeAppointment.durationMinutes}
+                        onChange={(event) =>
+                          setActiveAppointment({
+                            ...activeAppointment,
+                            durationMinutes: Number(event.target.value || 30),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="admin-appointment-customer">Customer name</label>
+                    <input
+                      id="admin-appointment-customer"
+                      className="form-input"
+                      value={activeAppointment.customerName}
+                      onChange={(event) => setActiveAppointment({ ...activeAppointment, customerName: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="admin-appointment-phone">Customer phone</label>
+                    <input
+                      id="admin-appointment-phone"
+                      className="form-input"
+                      value={activeAppointment.customerPhone}
+                      onChange={(event) => setActiveAppointment({ ...activeAppointment, customerPhone: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="admin-appointment-email">Customer email</label>
+                    <input
+                      id="admin-appointment-email"
+                      className="form-input"
+                      placeholder="customer@example.com"
+                      value={activeAppointment.customerEmail}
+                      onChange={(event) => setActiveAppointment({ ...activeAppointment, customerEmail: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="admin-appointment-service">Service / Type</label>
+                    <input
+                      id="admin-appointment-service"
+                      className="form-input"
+                      value={activeAppointment.serviceType}
+                      onChange={(event) => setActiveAppointment({ ...activeAppointment, serviceType: event.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group appointment-field-full">
+                  <label className="form-label" htmlFor="admin-appointment-status">Status</label>
+                  <select
+                    id="admin-appointment-status"
+                    className="form-select"
+                    value={activeAppointment.status}
+                    onChange={(event) =>
+                      setActiveAppointment({
+                        ...activeAppointment,
+                        status: event.target.value as AppointmentStatus,
+                        accent: event.target.value === "CANCELED" ? "red" : activeAppointment.accent,
+                      })
+                    }
+                  >
+                    {Object.entries(ADMIN_STATUS_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group appointment-field-full">
+                  <label className="form-label" htmlFor="admin-appointment-notes">Notes</label>
+                  <textarea
+                    id="admin-appointment-notes"
+                    className="form-textarea appointment-notes"
+                    value={activeAppointment.notes}
+                    onChange={(event) => setActiveAppointment({ ...activeAppointment, notes: event.target.value })}
+                  />
+                </div>
+
+                <div className="appointment-modal-actions">
+                  {!isCreatingAppointment ? (
+                    <button className="button-ghost destructive" type="button" onClick={deleteActiveAdminAppointment} disabled={savingAppointments}>
+                      Delete
+                    </button>
+                  ) : <span />}
+                  <div className="appointment-modal-action-group">
+                    <button className="button-secondary" type="button" onClick={() => setActiveAppointment(null)} disabled={savingAppointments}>
+                      Cancel
+                    </button>
+                    <button className="button" type="submit" disabled={savingAppointments}>
+                      {savingAppointments ? "Saving..." : "Save appointment"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
+          </div>
+        ) : null}
       </section>
     </main>
   );

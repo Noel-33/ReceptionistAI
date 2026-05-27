@@ -1017,6 +1017,9 @@ export class BusinessesService {
           medicalModeEnabled: resolveMedicalMode(business),
           onboardingCompleted: resolveOnboardingCompleted(business),
           memberCount: business.members.length,
+          appointments: extractAppointments(business.answeringRules),
+          appointmentsConfigured: hasConfiguredAppointments(business.answeringRules),
+          calendarIntegration: extractCalendarIntegration(business.answeringRules),
           members: business.members.map((membership) => ({
             id: membership.user.id,
             email: membership.user.email,
