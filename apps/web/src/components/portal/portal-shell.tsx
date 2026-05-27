@@ -6,7 +6,20 @@ import { clearSession } from "../../lib/session";
 import { PortalData } from "./use-portal-data";
 
 type PortalShellProps = {
-  active: "dashboard" | "profile" | "menu" | "refills" | "callbacks" | "settings" | "knowledge-base" | "telephony" | "calls" | "team" | "billing";
+  active:
+    | "dashboard"
+    | "profile"
+    | "menu"
+    | "refills"
+    | "callbacks"
+    | "settings"
+    | "knowledge-base"
+    | "appointments"
+    | "calendar-sync"
+    | "telephony"
+    | "calls"
+    | "team"
+    | "billing";
   title: string;
   subtitle: string;
   portal: PortalData;
@@ -52,6 +65,20 @@ export function PortalShell({ active, title, subtitle, portal, children }: Porta
       label: "Knowledge Base",
       icon: "KB",
       href: `/portal/knowledge-base?businessId=${businessId}`,
+      visible: portal.canEditConfiguration,
+    },
+    {
+      key: "appointments",
+      label: "Appointments",
+      icon: "AP",
+      href: `/portal/appointments?businessId=${businessId}`,
+      visible: portal.canViewCallLogs,
+    },
+    {
+      key: "calendar-sync",
+      label: "Calendar Sync",
+      icon: "MS",
+      href: `/portal/calendar-sync?businessId=${businessId}`,
       visible: portal.canEditConfiguration,
     },
     {

@@ -3,7 +3,9 @@ import { businessMemberCreateSchema } from "./business-members.schemas";
 import { BusinessesService } from "./businesses.service";
 import {
   businessAiSettingsSchema,
+  businessAppointmentsUpdateSchema,
   businessBillingSettingsSchema,
+  businessCalendarIntegrationSchema,
   businessKnowledgeBaseSchema,
   businessMenuImportSchema,
   businessMenuUpdateSchema,
@@ -78,6 +80,18 @@ export class BusinessesController {
   async updateKnowledgeBase(@Param("businessId") businessId: string, @Body() body: unknown) {
     const input = businessKnowledgeBaseSchema.parse(body);
     return this.businessesService.updateKnowledgeBase(businessId, input);
+  }
+
+  @Patch(":businessId/appointments")
+  async updateAppointments(@Param("businessId") businessId: string, @Body() body: unknown) {
+    const input = businessAppointmentsUpdateSchema.parse(body);
+    return this.businessesService.updateAppointments(businessId, input);
+  }
+
+  @Patch(":businessId/calendar-integration")
+  async updateCalendarIntegration(@Param("businessId") businessId: string, @Body() body: unknown) {
+    const input = businessCalendarIntegrationSchema.parse(body);
+    return this.businessesService.updateCalendarIntegration(businessId, input);
   }
 
   @Patch(":businessId/telephony-settings")

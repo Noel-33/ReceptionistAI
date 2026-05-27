@@ -197,3 +197,41 @@ export const businessKnowledgeBaseSchema = z.object({
 });
 
 export type BusinessKnowledgeBaseInput = z.infer<typeof businessKnowledgeBaseSchema>;
+
+// ─── Appointment and calendar schemas ────────────────────────────────────────
+
+export const appointmentStatusEnum = z.enum(["CONFIRMED", "PENDING", "COMPLETED", "CANCELED"]);
+export const appointmentSourceEnum = z.enum(["AI_BOOKED", "MANUAL", "MICROSOFT_SYNC"]);
+export const appointmentAccentEnum = z.enum(["blue", "green", "red"]);
+
+export const businessAppointmentSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(2).max(160),
+  startsAt: z.string().min(4),
+  durationMinutes: z.coerce.number().int().min(5).max(480).default(30),
+  customerName: z.string().max(120).optional().default(""),
+  customerPhone: z.string().max(40).optional().default(""),
+  customerEmail: z.string().max(160).optional().default(""),
+  serviceType: z.string().max(120).optional().default(""),
+  status: appointmentStatusEnum.default("CONFIRMED"),
+  notes: z.string().max(1200).optional().default(""),
+  source: appointmentSourceEnum.default("MANUAL"),
+  accent: appointmentAccentEnum.default("blue"),
+});
+
+export const businessAppointmentsUpdateSchema = z.object({
+  appointments: z.array(businessAppointmentSchema).default([]),
+});
+
+export type BusinessAppointmentsUpdateInput = z.infer<typeof businessAppointmentsUpdateSchema>;
+
+export const businessCalendarIntegrationSchema = z.object({
+  provider: z.enum(["MICROSOFT_OUTLOOK"]).default("MICROSOFT_OUTLOOK"),
+  connected: z.boolean().default(false),
+  connectedEmail: z.string().max(160).optional().default(""),
+  connectedAt: z.string().optional().default(""),
+  syncAppointments: z.boolean().default(true),
+  respectBusyTimes: z.boolean().default(true),
+});
+
+export type BusinessCalendarIntegrationInput = z.infer<typeof businessCalendarIntegrationSchema>;

@@ -85,6 +85,29 @@ type BusinessData = {
       differentiators: string;
     };
     conversationGoal?: string;
+    appointments?: Array<{
+      id: string;
+      title: string;
+      startsAt: string;
+      durationMinutes: number;
+      customerName: string;
+      customerPhone: string;
+      customerEmail: string;
+      serviceType: string;
+      status: "CONFIRMED" | "PENDING" | "COMPLETED" | "CANCELED";
+      notes: string;
+      source: "AI_BOOKED" | "MANUAL" | "MICROSOFT_SYNC";
+      accent: "blue" | "green" | "red";
+    }>;
+    appointmentsConfigured?: boolean;
+    calendarIntegration?: {
+      provider: "MICROSOFT_OUTLOOK";
+      connected: boolean;
+      connectedEmail: string;
+      connectedAt: string;
+      syncAppointments: boolean;
+      respectBusyTimes: boolean;
+    };
   };
 };
 

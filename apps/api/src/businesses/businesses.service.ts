@@ -5,7 +5,9 @@ import { PrismaService } from "../prisma/prisma.service";
 import { BusinessMemberCreateInput } from "./business-members.schemas";
 import {
   BusinessAiSettingsInput,
+  BusinessAppointmentsUpdateInput,
   BusinessBillingSettingsInput,
+  BusinessCalendarIntegrationInput,
   BusinessKnowledgeBaseInput,
   BusinessMenuImportInput,
   BusinessMenuUpdateInput,
@@ -306,6 +308,85 @@ function extractKnowledgeBase(value: unknown) {
 function extractConversationGoal(value: unknown): string {
   const rules = readBusinessRules(value);
   return typeof rules.conversationGoal === "string" ? rules.conversationGoal : "TAKE_MESSAGES";
+}
+
+function normalizeAppointmentStatus(value: unknown) {
+  const status = String(value ?? "CONFIRMED").trim().toUpperCase();
+  return status === "PENDING" || status === "COMPLETED" || status === "CANCELED" ? status : "CONFIRMED";
+}
+
+function normalizeAppointmentSource(value: unknown) {
+  const source = String(value ?? "MANUAL").trim().toUpperCase();
+  return source === "AI_BOOKED" || source === "MICROSOFT_SYNC" ? source : "MANUAL";
+}
+
+function normalizeAppointmentAccent(value: unknown) {
+  const accent = String(value ?? "blue").trim().toLowerCase();
+  return accent === "green" || accent === "red" ? accent : "blue";
+}
+
+function extractAppointments(value: unknown) {
+  const rules = readBusinessRules(value);
+  const appointments = rules.appointments;
+
+  if (!Array.isArray(appointments)) {
+    return [];
+  }
+
+  return appointments
+    .filter((appointment) => appointment && typeof appointment === "object" && !Array.isArray(appointment))
+    .map((appointment) => {
+      const record = appointment as Record<string, unknown>;
+
+      return {
+        id: String(record.id ?? "").trim(),
+        title: String(record.title ?? "").trim(),
+        startsAt: String(record.startsAt ?? "").trim(),
+        durationMinutes: Number(record.durationMinutes ?? 30),
+        customerName: String(record.customerName ?? "").trim(),
+        customerPhone: String(record.customerPhone ?? "").trim(),
+        customerEmail: String(record.customerEmail ?? "").trim(),
+        serviceType: String(record.serviceType ?? "").trim(),
+        status: normalizeAppointmentStatus(record.status),
+        notes: String(record.notes ?? "").trim(),
+        source: normalizeAppointmentSource(record.source),
+        accent: normalizeAppointmentAccent(record.accent),
+      };
+    })
+    .filter((appointment) => appointment.id && appointment.title && appointment.startsAt)
+    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+}
+
+function hasConfiguredAppointments(value: unknown) {
+  const rules = readBusinessRules(value);
+  return Array.isArray(rules.appointments) || typeof rules.appointmentsUpdatedAt === "string";
+}
+
+function extractCalendarIntegration(value: unknown) {
+  const rules = readBusinessRules(value);
+  const calendar = rules.calendarIntegration;
+
+  if (!calendar || typeof calendar !== "object" || Array.isArray(calendar)) {
+    return {
+      provider: "MICROSOFT_OUTLOOK",
+      connected: false,
+      connectedEmail: "",
+      connectedAt: "",
+      syncAppointments: true,
+      respectBusyTimes: true,
+    };
+  }
+
+  const record = calendar as Record<string, unknown>;
+
+  return {
+    provider: "MICROSOFT_OUTLOOK",
+    connected: Boolean(record.connected),
+    connectedEmail: String(record.connectedEmail ?? "").trim(),
+    connectedAt: String(record.connectedAt ?? "").trim(),
+    syncAppointments: record.syncAppointments !== false,
+    respectBusyTimes: record.respectBusyTimes !== false,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -880,6 +961,9 @@ export class BusinessesService {
         pharmacyCallbackRequests: extractPharmacyCallbackRequests(business.answeringRules),
         knowledgeBase: extractKnowledgeBase(business.answeringRules),
         conversationGoal: extractConversationGoal(business.answeringRules),
+        appointments: extractAppointments(business.answeringRules),
+        appointmentsConfigured: hasConfiguredAppointments(business.answeringRules),
+        calendarIntegration: extractCalendarIntegration(business.answeringRules),
         billingOverview,
       },
     };
@@ -1263,6 +1347,86 @@ export class BusinessesService {
         knowledgeBase: extractKnowledgeBase(business.answeringRules),
         conversationGoal: extractConversationGoal(business.answeringRules),
       },
+    };
+  }
+
+  async updateAppointments(businessId: string, input: BusinessAppointmentsUpdateInput) {
+    const existing = await this.prisma.business.findUnique({
+      where: { id: businessId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Business not found.");
+    }
+
+    const previousRules = readBusinessRules(existing.answeringRules);
+    const nextAppointments = input.appointments
+      .map((appointment) => ({
+        id: appointment.id.trim(),
+        title: appointment.title.trim(),
+        startsAt: appointment.startsAt.trim(),
+        durationMinutes: appointment.durationMinutes,
+        customerName: appointment.customerName.trim(),
+        customerPhone: appointment.customerPhone.trim(),
+        customerEmail: appointment.customerEmail.trim(),
+        serviceType: appointment.serviceType.trim(),
+        status: appointment.status,
+        notes: appointment.notes.trim(),
+        source: appointment.source,
+        accent: appointment.accent,
+      }))
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+
+    const business = await this.prisma.business.update({
+      where: { id: businessId },
+      data: {
+        answeringRules: {
+          ...previousRules,
+          appointments: nextAppointments,
+          appointmentsUpdatedAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    return {
+      message: "Appointments updated successfully.",
+      appointments: extractAppointments(business.answeringRules),
+    };
+  }
+
+  async updateCalendarIntegration(businessId: string, input: BusinessCalendarIntegrationInput) {
+    const existing = await this.prisma.business.findUnique({
+      where: { id: businessId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Business not found.");
+    }
+
+    const previousRules = readBusinessRules(existing.answeringRules);
+    const nextIntegration = {
+      provider: "MICROSOFT_OUTLOOK",
+      connected: input.connected,
+      connectedEmail: input.connectedEmail.trim(),
+      connectedAt: input.connected ? input.connectedAt.trim() || new Date().toISOString() : "",
+      syncAppointments: input.syncAppointments,
+      respectBusyTimes: input.respectBusyTimes,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const business = await this.prisma.business.update({
+      where: { id: businessId },
+      data: {
+        answeringRules: {
+          ...previousRules,
+          calendarIntegration: nextIntegration,
+        },
+      },
+    });
+
+    return {
+      message: input.connected ? "Calendar integration updated successfully." : "Calendar integration disconnected.",
+      calendarIntegration: extractCalendarIntegration(business.answeringRules),
     };
   }
 
