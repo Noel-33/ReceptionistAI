@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { BusinessCategory, UserRole } from "@prisma/client";
 import { randomBytes, scryptSync } from "node:crypto";
+import { CalendarService, CalendarSyncAppointment } from "../calendar/calendar.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { BusinessMemberCreateInput } from "./business-members.schemas";
 import {
@@ -310,22 +311,22 @@ function extractConversationGoal(value: unknown): string {
   return typeof rules.conversationGoal === "string" ? rules.conversationGoal : "TAKE_MESSAGES";
 }
 
-function normalizeAppointmentStatus(value: unknown) {
+function normalizeAppointmentStatus(value: unknown): CalendarSyncAppointment["status"] {
   const status = String(value ?? "CONFIRMED").trim().toUpperCase();
   return status === "PENDING" || status === "COMPLETED" || status === "CANCELED" ? status : "CONFIRMED";
 }
 
-function normalizeAppointmentSource(value: unknown) {
+function normalizeAppointmentSource(value: unknown): CalendarSyncAppointment["source"] {
   const source = String(value ?? "MANUAL").trim().toUpperCase();
-  return source === "AI_BOOKED" || source === "MICROSOFT_SYNC" ? source : "MANUAL";
+  return source === "AI_BOOKED" || source === "GOOGLE_SYNC" || source === "MICROSOFT_SYNC" ? source : "MANUAL";
 }
 
-function normalizeAppointmentAccent(value: unknown) {
+function normalizeAppointmentAccent(value: unknown): CalendarSyncAppointment["accent"] {
   const accent = String(value ?? "blue").trim().toLowerCase();
   return accent === "green" || accent === "red" ? accent : "blue";
 }
 
-function extractAppointments(value: unknown) {
+function extractAppointments(value: unknown): CalendarSyncAppointment[] {
   const rules = readBusinessRules(value);
   const appointments = rules.appointments;
 
@@ -351,6 +352,8 @@ function extractAppointments(value: unknown) {
         notes: String(record.notes ?? "").trim(),
         source: normalizeAppointmentSource(record.source),
         accent: normalizeAppointmentAccent(record.accent),
+        googleEventId: String(record.googleEventId ?? "").trim(),
+        googleCalendarId: String(record.googleCalendarId ?? "").trim(),
       };
     })
     .filter((appointment) => appointment.id && appointment.title && appointment.startsAt)
@@ -368,7 +371,7 @@ function extractCalendarIntegration(value: unknown) {
 
   if (!calendar || typeof calendar !== "object" || Array.isArray(calendar)) {
     return {
-      provider: "MICROSOFT_OUTLOOK",
+      provider: "GOOGLE_CALENDAR",
       connected: false,
       connectedEmail: "",
       connectedAt: "",
@@ -380,7 +383,7 @@ function extractCalendarIntegration(value: unknown) {
   const record = calendar as Record<string, unknown>;
 
   return {
-    provider: "MICROSOFT_OUTLOOK",
+    provider: "GOOGLE_CALENDAR",
     connected: Boolean(record.connected),
     connectedEmail: String(record.connectedEmail ?? "").trim(),
     connectedAt: String(record.connectedAt ?? "").trim(),
@@ -780,7 +783,10 @@ function extractResponseText(value: unknown): string {
 
 @Injectable()
 export class BusinessesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly calendarService: CalendarService,
+  ) {}
 
   private async calculateBillingOverview(business: {
     id: string;
@@ -925,6 +931,9 @@ export class BusinessesService {
   async getBusinessById(businessId: string) {
     const business = await this.prisma.business.findUnique({
       where: { id: businessId },
+      include: {
+        calendarConnections: true,
+      },
     });
 
     if (!business) {
@@ -963,7 +972,9 @@ export class BusinessesService {
         conversationGoal: extractConversationGoal(business.answeringRules),
         appointments: extractAppointments(business.answeringRules),
         appointmentsConfigured: hasConfiguredAppointments(business.answeringRules),
-        calendarIntegration: extractCalendarIntegration(business.answeringRules),
+        calendarIntegration: this.calendarService.resolveGoogleIntegration(
+          business.calendarConnections.find((connection) => connection.provider === "GOOGLE"),
+        ),
         billingOverview,
       },
     };
@@ -972,6 +983,7 @@ export class BusinessesService {
   async listAdminBusinesses() {
     const businesses = await this.prisma.business.findMany({
       include: {
+        calendarConnections: true,
         members: {
           include: {
             user: true,
@@ -1019,7 +1031,9 @@ export class BusinessesService {
           memberCount: business.members.length,
           appointments: extractAppointments(business.answeringRules),
           appointmentsConfigured: hasConfiguredAppointments(business.answeringRules),
-          calendarIntegration: extractCalendarIntegration(business.answeringRules),
+          calendarIntegration: this.calendarService.resolveGoogleIntegration(
+            business.calendarConnections.find((connection) => connection.provider === "GOOGLE"),
+          ),
           members: business.members.map((membership) => ({
             id: membership.user.id,
             email: membership.user.email,
@@ -1363,29 +1377,42 @@ export class BusinessesService {
     }
 
     const previousRules = readBusinessRules(existing.answeringRules);
-    const nextAppointments = input.appointments
-      .map((appointment) => ({
-        id: appointment.id.trim(),
-        title: appointment.title.trim(),
-        startsAt: appointment.startsAt.trim(),
-        durationMinutes: appointment.durationMinutes,
-        customerName: appointment.customerName.trim(),
-        customerPhone: appointment.customerPhone.trim(),
-        customerEmail: appointment.customerEmail.trim(),
-        serviceType: appointment.serviceType.trim(),
-        status: appointment.status,
-        notes: appointment.notes.trim(),
-        source: appointment.source,
-        accent: appointment.accent,
-      }))
+    const previousAppointments = extractAppointments(existing.answeringRules);
+    const previousById = new Map(previousAppointments.map((appointment) => [appointment.id, appointment]));
+    const nextAppointments: CalendarSyncAppointment[] = input.appointments
+      .map((appointment) => {
+        const previousAppointment = previousById.get(appointment.id.trim());
+
+        return {
+          id: appointment.id.trim(),
+          title: appointment.title.trim(),
+          startsAt: appointment.startsAt.trim(),
+          durationMinutes: appointment.durationMinutes,
+          customerName: appointment.customerName.trim(),
+          customerPhone: appointment.customerPhone.trim(),
+          customerEmail: appointment.customerEmail.trim(),
+          serviceType: appointment.serviceType.trim(),
+          status: appointment.status,
+          notes: appointment.notes.trim(),
+          source: appointment.source,
+          accent: appointment.accent,
+          googleEventId: appointment.googleEventId.trim() || previousAppointment?.googleEventId || "",
+          googleCalendarId: appointment.googleCalendarId.trim() || previousAppointment?.googleCalendarId || "",
+        };
+      })
       .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+    const syncedAppointments = await this.calendarService.syncGoogleAppointments({
+      business: existing,
+      previousAppointments,
+      nextAppointments,
+    });
 
     const business = await this.prisma.business.update({
       where: { id: businessId },
       data: {
         answeringRules: {
           ...previousRules,
-          appointments: nextAppointments,
+          appointments: syncedAppointments,
           appointmentsUpdatedAt: new Date().toISOString(),
         },
       },
@@ -1406,30 +1433,17 @@ export class BusinessesService {
       throw new NotFoundException("Business not found.");
     }
 
-    const previousRules = readBusinessRules(existing.answeringRules);
-    const nextIntegration = {
-      provider: "MICROSOFT_OUTLOOK",
+    const calendarIntegration = await this.calendarService.updateGoogleSettings(businessId, {
       connected: input.connected,
       connectedEmail: input.connectedEmail.trim(),
-      connectedAt: input.connected ? input.connectedAt.trim() || new Date().toISOString() : "",
+      connectedAt: input.connectedAt.trim(),
       syncAppointments: input.syncAppointments,
       respectBusyTimes: input.respectBusyTimes,
-      updatedAt: new Date().toISOString(),
-    };
-
-    const business = await this.prisma.business.update({
-      where: { id: businessId },
-      data: {
-        answeringRules: {
-          ...previousRules,
-          calendarIntegration: nextIntegration,
-        },
-      },
     });
 
     return {
-      message: input.connected ? "Calendar integration updated successfully." : "Calendar integration disconnected.",
-      calendarIntegration: extractCalendarIntegration(business.answeringRules),
+      message: input.connected ? "Google Calendar settings updated successfully." : "Google Calendar disconnected.",
+      calendarIntegration,
     };
   }
 

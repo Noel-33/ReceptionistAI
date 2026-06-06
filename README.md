@@ -16,6 +16,15 @@ This repository contains the first application foundation for the Receptionist A
 3. Run the web app with `npm run dev:web`
 4. Run the API with `npm run dev:api`
 
+## Railway Deployment
+
+Railway deployment is configured for two app services from this monorepo:
+
+- API service config: `railway.api.json`
+- Web service config: `railway.web.json`
+
+See `RAILWAY_DEPLOYMENT.md` for the full setup steps, variables, Google OAuth callback URL, and DeltaPrompt seed command.
+
 ## DeltaPrompt AI Portal
 
 The DeltaPrompt AI business portal is seeded through the same multi-tenant framework as every other business account.

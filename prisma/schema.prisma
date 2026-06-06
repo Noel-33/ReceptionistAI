@@ -53,6 +53,10 @@ enum SubscriptionStatus {
   PAUSED
 }
 
+enum CalendarProvider {
+  GOOGLE
+}
+
 model User {
   id          String           @id @default(cuid())
   email       String           @unique
@@ -89,6 +93,7 @@ model Business {
   members            BusinessMember[]
   calls              Call[]
   subscription       Subscription?
+  calendarConnections CalendarConnection[]
 }
 
 model BusinessMember {
@@ -134,4 +139,33 @@ model Subscription {
   updatedAt   DateTime           @updatedAt
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model CalendarConnection {
+  id                    String           @id @default(cuid())
+  businessId            String
+  provider              CalendarProvider
+  providerAccountId     String?
+  accessTokenEncrypted  String?
+  refreshTokenEncrypted String
+  tokenExpiresAt        DateTime?
+  calendarId            String           @default("primary")
+  syncAppointments      Boolean          @default(true)
+  respectBusyTimes      Boolean          @default(true)
+  syncToken             String?
+  lastHealthCheckedAt   DateTime?
+  lastHealthStatus      String?
+  lastHealthError       String?
+  lastSyncAt            DateTime?
+  lastSyncStatus        String?
+  lastSyncError         String?
+  lastSyncImportedCount Int              @default(0)
+  lastSyncUpdatedCount  Int              @default(0)
+  lastSyncDeletedCount  Int              @default(0)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, provider])
 }

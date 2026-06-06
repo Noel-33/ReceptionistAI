@@ -96,12 +96,14 @@ type BusinessData = {
       serviceType: string;
       status: "CONFIRMED" | "PENDING" | "COMPLETED" | "CANCELED";
       notes: string;
-      source: "AI_BOOKED" | "MANUAL" | "MICROSOFT_SYNC";
+      source: "AI_BOOKED" | "MANUAL" | "GOOGLE_SYNC" | "MICROSOFT_SYNC";
       accent: "blue" | "green" | "red";
+      googleEventId?: string;
+      googleCalendarId?: string;
     }>;
     appointmentsConfigured?: boolean;
     calendarIntegration?: {
-      provider: "MICROSOFT_OUTLOOK";
+      provider: "GOOGLE_CALENDAR";
       connected: boolean;
       connectedEmail: string;
       connectedAt: string;

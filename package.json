@@ -11,10 +11,18 @@
     "dev:api": "npm run start:dev --workspace @receptionist-ai/api",
     "build:web": "npm run build --workspace @receptionist-ai/web",
     "build:api": "npm run build --workspace @receptionist-ai/api",
+    "start:web": "npm run start --workspace @receptionist-ai/web",
+    "start:api": "npm run start --workspace @receptionist-ai/api",
     "lint:web": "npm run lint --workspace @receptionist-ai/web",
     "lint:api": "npm run lint --workspace @receptionist-ai/api",
     "prisma:generate": "npm run prisma:generate --workspace @receptionist-ai/api",
     "prisma:migrate": "npm run prisma:migrate --workspace @receptionist-ai/api",
+    "prisma:push": "npx prisma db push --schema prisma/schema.prisma",
+    "railway:build:api": "npm run prisma:generate && npm run build:api",
+    "railway:start:api": "npm run start:api",
+    "railway:db:push": "npm run prisma:push",
+    "railway:build:web": "npm run build:web",
+    "railway:start:web": "npm run start:web",
     "seed:deltaprompt": "ts-node --project apps/api/tsconfig.json -r tsconfig-paths/register scripts/seed-deltaprompt.ts"
   }
 }

@@ -1140,32 +1140,36 @@ img {
 }
 
 .admin-calendar-panel {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .admin-calendar-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .admin-calendar-sync-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 18px;
   align-items: center;
+  min-width: 0;
   padding: 16px;
   border-radius: 18px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.72);
 }
 
+.admin-calendar-sync-info {
+  min-width: 0;
+}
+
 .admin-calendar-sync-card h3 {
   margin: 10px 0 6px;
   font-family: var(--font-heading);
   font-size: 1.1rem;
-  letter-spacing: -0.03em;
 }
 
 .admin-calendar-sync-card p {
@@ -1177,6 +1181,35 @@ img {
 
 .admin-calendar-sync-card strong {
   color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.admin-calendar-health-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.admin-calendar-health-line small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.admin-calendar-sync-card .admin-calendar-health-result {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.admin-calendar-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 260px;
 }
 
 .admin-calendar-toolbar {
@@ -1206,6 +1239,10 @@ img {
   .admin-calendar-head {
     grid-template-columns: 1fr;
   }
+
+  .admin-calendar-sync-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1218,6 +1255,15 @@ img {
 
   .admin-display-title {
     font-size: clamp(2rem, 9vw, 2.8rem);
+  }
+
+  .admin-calendar-sync-card {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-calendar-sync-actions {
+    justify-content: flex-start;
+    min-width: 0;
   }
 }
 
@@ -2838,6 +2884,97 @@ img {
   background: #39a75f;
 }
 
+.calendar-health-panel {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: #fbfcff;
+}
+
+.calendar-health-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.calendar-health-heading h3 {
+  margin: 10px 0 8px;
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+}
+
+.calendar-health-heading p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.calendar-health-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.calendar-health-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 28px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid #dbe4f5;
+  background: #f3f6fb;
+  color: #536078;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.calendar-health-pill.healthy {
+  color: #267343;
+  border-color: #bfe6cd;
+  background: #effaf3;
+}
+
+.calendar-health-pill.error {
+  color: #92372f;
+  border-color: #f1c8c3;
+  background: #fff7f6;
+}
+
+.calendar-health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.calendar-health-grid > div {
+  display: grid;
+  gap: 6px;
+  min-height: 84px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+}
+
+.calendar-health-grid span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.calendar-health-grid strong {
+  color: var(--text);
+  line-height: 1.35;
+}
+
 .calendar-sync-info-grid {
   display: grid;
   gap: 18px;
@@ -2852,11 +2989,27 @@ img {
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .calendar-health-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-health-actions {
+    justify-content: flex-start;
+  }
+
+  .calendar-health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
   .calendar-weekdays,
   .calendar-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-health-grid {
     grid-template-columns: 1fr;
   }
 

@@ -45,7 +45,7 @@ type AdminOverviewResponse = {
 };
 
 type AppointmentStatus = "CONFIRMED" | "PENDING" | "COMPLETED" | "CANCELED";
-type AppointmentSource = "AI_BOOKED" | "MANUAL" | "MICROSOFT_SYNC";
+type AppointmentSource = "AI_BOOKED" | "MANUAL" | "GOOGLE_SYNC" | "MICROSOFT_SYNC";
 type AppointmentAccent = "blue" | "green" | "red";
 
 type AppointmentItem = {
@@ -61,10 +61,12 @@ type AppointmentItem = {
   notes: string;
   source: AppointmentSource;
   accent: AppointmentAccent;
+  googleEventId?: string;
+  googleCalendarId?: string;
 };
 
 type CalendarIntegration = {
-  provider: "MICROSOFT_OUTLOOK";
+  provider: "GOOGLE_CALENDAR";
   connected: boolean;
   connectedEmail: string;
   connectedAt: string;
@@ -82,10 +84,46 @@ type CalendarIntegrationResponse = {
   calendarIntegration: CalendarIntegration;
 };
 
+type CalendarHealthStatus = "DISCONNECTED" | "HEALTHY" | "ERROR";
+
+type CalendarHealth = {
+  provider: "GOOGLE_CALENDAR";
+  connected: boolean;
+  connectedEmail: string;
+  calendarId: string;
+  status: CalendarHealthStatus;
+  message: string;
+  syncAppointments: boolean;
+  respectBusyTimes: boolean;
+  tokenExpiresAt: string;
+  lastHealthCheckedAt: string;
+  lastHealthStatus: string;
+  lastHealthError: string;
+  lastSyncAt: string;
+  lastSyncStatus: string;
+  lastSyncError: string;
+  lastSyncImportedCount: number;
+  lastSyncUpdatedCount: number;
+  lastSyncDeletedCount: number;
+  twoWaySyncMode: string;
+  pushNotificationsEnabled: boolean;
+  pushNotificationsNote: string;
+};
+
+type CalendarSyncResponse = {
+  message: string;
+  sync: {
+    importedCount: number;
+    updatedCount: number;
+    deletedCount: number;
+    syncedAt: string;
+  };
+  health: CalendarHealth;
+};
+
 const ADMIN_WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const ADMIN_DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
-const ADMIN_INITIAL_MONTH = new Date(2026, 4, 1);
-const ADMIN_TODAY = new Date(2026, 4, 27);
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 const ADMIN_STATUS_LABELS: Record<AppointmentStatus, string> = {
   CONFIRMED: "Confirmed",
@@ -95,12 +133,36 @@ const ADMIN_STATUS_LABELS: Record<AppointmentStatus, string> = {
 };
 
 const ADMIN_DEFAULT_CALENDAR: CalendarIntegration = {
-  provider: "MICROSOFT_OUTLOOK",
-  connected: true,
-  connectedEmail: "vishant@vivratech.ca",
-  connectedAt: "2026-05-20T10:00:00",
+  provider: "GOOGLE_CALENDAR",
+  connected: false,
+  connectedEmail: "",
+  connectedAt: "",
   syncAppointments: true,
   respectBusyTimes: true,
+};
+
+const ADMIN_DEFAULT_HEALTH: CalendarHealth = {
+  provider: "GOOGLE_CALENDAR",
+  connected: false,
+  connectedEmail: "",
+  calendarId: "primary",
+  status: "DISCONNECTED",
+  message: "Google Calendar is not connected.",
+  syncAppointments: true,
+  respectBusyTimes: true,
+  tokenExpiresAt: "",
+  lastHealthCheckedAt: "",
+  lastHealthStatus: "",
+  lastHealthError: "",
+  lastSyncAt: "",
+  lastSyncStatus: "",
+  lastSyncError: "",
+  lastSyncImportedCount: 0,
+  lastSyncUpdatedCount: 0,
+  lastSyncDeletedCount: 0,
+  twoWaySyncMode: "manual-pull",
+  pushNotificationsEnabled: false,
+  pushNotificationsNote: "Google push sync needs a deployed HTTPS webhook. Manual two-way sync is available now.",
 };
 
 function formatAdminDate(value: string) {
@@ -117,8 +179,41 @@ function formatAdminDate(value: string) {
   });
 }
 
+function formatAdminDateTime(value: string) {
+  if (!value) {
+    return "Not yet";
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "Not yet";
+  }
+
+  return parsed.toLocaleString("en-CA", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function statusLabel(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function calendarHealthLabel(status: CalendarHealthStatus | string) {
+  if (status === "HEALTHY") return "Healthy";
+  if (status === "ERROR") return "Action needed";
+  return "Not connected";
+}
+
+function formatAdminCalendarSyncSummary(importedCount: number, updatedCount: number, deletedCount: number) {
+  if (importedCount + updatedCount + deletedCount === 0) {
+    return "No new Google changes found.";
+  }
+
+  return `${importedCount} imported, ${updatedCount} updated, ${deletedCount} canceled.`;
 }
 
 function adminUid() {
@@ -131,6 +226,16 @@ function adminPad(value: number) {
 
 function adminDateKey(date: Date) {
   return `${date.getFullYear()}-${adminPad(date.getMonth() + 1)}-${adminPad(date.getDate())}`;
+}
+
+function adminStartOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function nextAdminAppointmentDateTime() {
+  const date = new Date();
+  date.setHours(date.getHours() + 1, 0, 0, 0);
+  return `${adminDateKey(date)}T${adminPad(date.getHours())}:${adminPad(date.getMinutes())}:00`;
 }
 
 function parseAdminDate(value: string) {
@@ -294,7 +399,7 @@ function buildAdminDefaultAppointments(businessName: string): AppointmentItem[] 
   ];
 }
 
-function emptyAdminAppointment(businessName: string, startsAt = "2026-05-27T09:00:00"): AppointmentItem {
+function emptyAdminAppointment(businessName: string, startsAt = nextAdminAppointmentDateTime()): AppointmentItem {
   return {
     id: adminUid(),
     title: "New consultation",
@@ -330,7 +435,8 @@ export function AdminDashboardPage() {
   const [billingSuccess, setBillingSuccess] = useState("");
   const [passwordResetSuccess, setPasswordResetSuccess] = useState("");
   const [passwordDraftEmail, setPasswordDraftEmail] = useState("");
-  const [adminVisibleMonth, setAdminVisibleMonth] = useState(ADMIN_INITIAL_MONTH);
+  const adminToday = useMemo(() => new Date(), []);
+  const [adminVisibleMonth, setAdminVisibleMonth] = useState(() => adminStartOfMonth(new Date()));
   const [adminAppointmentView, setAdminAppointmentView] = useState<"month" | "list">("month");
   const [adminAppointments, setAdminAppointments] = useState<AppointmentItem[]>([]);
   const [activeAppointment, setActiveAppointment] = useState<AppointmentItem | null>(null);
@@ -339,6 +445,9 @@ export function AdminDashboardPage() {
   const [appointmentSuccess, setAppointmentSuccess] = useState("");
   const [appointmentError, setAppointmentError] = useState("");
   const [savingCalendar, setSavingCalendar] = useState(false);
+  const [checkingCalendarHealth, setCheckingCalendarHealth] = useState(false);
+  const [syncingCalendar, setSyncingCalendar] = useState(false);
+  const [adminCalendarHealth, setAdminCalendarHealth] = useState<CalendarHealth>(ADMIN_DEFAULT_HEALTH);
   const [calendarSuccess, setCalendarSuccess] = useState("");
 
   useEffect(() => {
@@ -393,12 +502,13 @@ export function AdminDashboardPage() {
       : buildAdminDefaultAppointments(selectedBusiness.name);
 
     setAdminAppointments(nextAppointments);
-    setAdminVisibleMonth(ADMIN_INITIAL_MONTH);
+    setAdminVisibleMonth(adminStartOfMonth(new Date()));
     setAdminAppointmentView("month");
     setActiveAppointment(null);
     setAppointmentSuccess("");
     setAppointmentError("");
     setCalendarSuccess("");
+    setAdminCalendarHealth(ADMIN_DEFAULT_HEALTH);
   }, [selectedBusiness?.id, selectedBusiness?.name]);
 
   const billingFormKey = selectedBusiness
@@ -424,6 +534,15 @@ export function AdminDashboardPage() {
   const adminCalendarIntegration = selectedBusiness
     ? resolveAdminCalendarIntegration(selectedBusiness.calendarIntegration)
     : ADMIN_DEFAULT_CALENDAR;
+
+  useEffect(() => {
+    if (!selectedBusiness?.id || !adminCalendarIntegration.connected) {
+      setAdminCalendarHealth(ADMIN_DEFAULT_HEALTH);
+      return;
+    }
+
+    void refreshAdminCalendarHealth(false);
+  }, [selectedBusiness?.id, adminCalendarIntegration.connected]);
 
   const adminCalendarCells = useMemo(() => buildAdminMonthCells(adminVisibleMonth), [adminVisibleMonth]);
   const adminEventsByDay = useMemo(() => {
@@ -607,6 +726,9 @@ export function AdminDashboardPage() {
         method: "PATCH",
         body: nextIntegration,
       });
+      if (!response.calendarIntegration?.connected) {
+        setAdminCalendarHealth(ADMIN_DEFAULT_HEALTH);
+      }
       setCalendarSuccess(response.message);
       await loadOverview();
     } catch (requestError) {
@@ -616,15 +738,65 @@ export function AdminDashboardPage() {
     }
   }
 
+  async function refreshAdminCalendarHealth(showSuccess = true) {
+    if (!selectedBusiness) {
+      return;
+    }
+
+    setCheckingCalendarHealth(true);
+    setError("");
+
+    try {
+      const response = await apiRequest<CalendarHealth>(`/api/calendar/google/health?businessId=${encodeURIComponent(selectedBusiness.id)}`);
+      setAdminCalendarHealth(response);
+      if (showSuccess) {
+        setCalendarSuccess(response.message);
+      }
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to check Google Calendar health.");
+    } finally {
+      setCheckingCalendarHealth(false);
+    }
+  }
+
+  async function syncAdminCalendarNow() {
+    if (!selectedBusiness) {
+      return;
+    }
+
+    setSyncingCalendar(true);
+    setError("");
+    setCalendarSuccess("");
+    setAppointmentError("");
+
+    try {
+      const response = await apiRequest<CalendarSyncResponse>("/api/calendar/google/sync", {
+        method: "POST",
+        body: { businessId: selectedBusiness.id },
+      });
+      setAdminCalendarHealth(response.health);
+      setCalendarSuccess(
+        `${response.message} ${formatAdminCalendarSyncSummary(
+          response.sync.importedCount,
+          response.sync.updatedCount,
+          response.sync.deletedCount,
+        )}`,
+      );
+      await loadOverview();
+    } catch (requestError) {
+      setAppointmentError(requestError instanceof Error ? requestError.message : "Unable to sync Google Calendar.");
+      await refreshAdminCalendarHealth(false);
+    } finally {
+      setSyncingCalendar(false);
+    }
+  }
+
   function connectAdminCalendar() {
-    void saveAdminCalendarIntegration({
-      ...adminCalendarIntegration,
-      connected: true,
-      connectedEmail: adminCalendarIntegration.connectedEmail || "vishant@vivratech.ca",
-      connectedAt: new Date().toISOString(),
-      syncAppointments: true,
-      respectBusyTimes: true,
-    });
+    if (!selectedBusiness) {
+      return;
+    }
+
+    window.location.href = `${API_URL}/api/calendar/google/connect?businessId=${encodeURIComponent(selectedBusiness.id)}&returnTo=admin`;
   }
 
   function disconnectAdminCalendar() {
@@ -788,30 +960,61 @@ export function AdminDashboardPage() {
                     </div>
 
                     <div className="admin-calendar-sync-card">
-                      <div>
+                      <div className="admin-calendar-sync-info">
                         <span className="eyebrow">Calendar Sync</span>
-                        <h3>Microsoft Outlook</h3>
+                        <h3>Google Calendar</h3>
                         <p>
                           {adminCalendarIntegration.connected ? (
-                            <>Connected as <strong>{adminCalendarIntegration.connectedEmail || "vishant@vivratech.ca"}</strong></>
+                            <>Connected as <strong>{adminCalendarIntegration.connectedEmail || "Google account"}</strong></>
                           ) : (
                             "Not connected"
                           )}
                         </p>
+                        <div className="admin-calendar-health-line">
+                          <span className={`calendar-health-pill ${adminCalendarHealth.status.toLowerCase()}`}>
+                            {calendarHealthLabel(adminCalendarHealth.status)}
+                          </span>
+                          <small>Last sync: {formatAdminDateTime(adminCalendarHealth.lastSyncAt)}</small>
+                        </div>
+                        <p className="admin-calendar-health-result">
+                          {adminCalendarHealth.lastSyncStatus
+                            ? formatAdminCalendarSyncSummary(
+                                adminCalendarHealth.lastSyncImportedCount,
+                                adminCalendarHealth.lastSyncUpdatedCount,
+                                adminCalendarHealth.lastSyncDeletedCount,
+                              )
+                            : "No sync yet."}
+                        </p>
                       </div>
                       {adminCalendarIntegration.connected ? (
-                        <button className="button-secondary" disabled={savingCalendar} onClick={disconnectAdminCalendar} type="button">
-                          {savingCalendar ? "Saving..." : "Disconnect"}
-                        </button>
+                        <div className="admin-calendar-sync-actions">
+                          <button
+                            className="button-secondary"
+                            disabled={checkingCalendarHealth}
+                            onClick={() => refreshAdminCalendarHealth(true)}
+                            type="button"
+                          >
+                            {checkingCalendarHealth ? "Checking..." : "Check"}
+                          </button>
+                          <button className="button" disabled={syncingCalendar} onClick={syncAdminCalendarNow} type="button">
+                            {syncingCalendar ? "Syncing..." : "Sync now"}
+                          </button>
+                          <button className="button-secondary" disabled={savingCalendar} onClick={disconnectAdminCalendar} type="button">
+                            {savingCalendar ? "Saving..." : "Disconnect"}
+                          </button>
+                        </div>
                       ) : (
                         <button className="button" disabled={savingCalendar} onClick={connectAdminCalendar} type="button">
-                          {savingCalendar ? "Saving..." : "Connect"}
+                          Connect
                         </button>
                       )}
                     </div>
                   </div>
 
                   {calendarSuccess ? <div className="status-banner success">{calendarSuccess}</div> : null}
+                  {adminCalendarHealth.lastHealthError || adminCalendarHealth.lastSyncError ? (
+                    <div className="status-banner error">{adminCalendarHealth.lastHealthError || adminCalendarHealth.lastSyncError}</div>
+                  ) : null}
                   {appointmentSuccess ? <div className="status-banner success">{appointmentSuccess}</div> : null}
                   {appointmentError ? <div className="status-banner error">{appointmentError}</div> : null}
 
@@ -827,7 +1030,7 @@ export function AdminDashboardPage() {
                       <button
                         className="button-secondary calendar-today-button"
                         type="button"
-                        onClick={() => setAdminVisibleMonth(new Date(ADMIN_TODAY.getFullYear(), ADMIN_TODAY.getMonth(), 1))}
+                        onClick={() => setAdminVisibleMonth(adminStartOfMonth(new Date()))}
                       >
                         Today
                       </button>
@@ -867,7 +1070,7 @@ export function AdminDashboardPage() {
                         {adminCalendarCells.map((cellDate) => {
                           const key = adminDateKey(cellDate);
                           const isOutsideMonth = cellDate.getMonth() !== adminVisibleMonth.getMonth();
-                          const isToday = key === adminDateKey(ADMIN_TODAY);
+                          const isToday = key === adminDateKey(adminToday);
                           const dayEvents = adminEventsByDay[key] ?? [];
 
                           return (

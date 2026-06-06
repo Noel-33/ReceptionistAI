@@ -10,7 +10,7 @@ type Props = {
 };
 
 type AppointmentStatus = "CONFIRMED" | "PENDING" | "COMPLETED" | "CANCELED";
-type AppointmentSource = "AI_BOOKED" | "MANUAL" | "MICROSOFT_SYNC";
+type AppointmentSource = "AI_BOOKED" | "MANUAL" | "GOOGLE_SYNC" | "MICROSOFT_SYNC";
 type AppointmentAccent = "blue" | "green" | "red";
 
 type AppointmentItem = {
@@ -26,6 +26,8 @@ type AppointmentItem = {
   notes: string;
   source: AppointmentSource;
   accent: AppointmentAccent;
+  googleEventId?: string;
+  googleCalendarId?: string;
 };
 
 type AppointmentsResponse = {
@@ -35,8 +37,6 @@ type AppointmentsResponse = {
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
-const INITIAL_MONTH = new Date(2026, 4, 1);
-const DEMO_TODAY = new Date(2026, 4, 27);
 
 const STATUS_LABELS: Record<AppointmentStatus, string> = {
   CONFIRMED: "Confirmed",
@@ -55,6 +55,16 @@ function pad(value: number) {
 
 function dateKey(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function nextHourDateTime() {
+  const date = new Date();
+  date.setHours(date.getHours() + 1, 0, 0, 0);
+  return `${dateKey(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
 }
 
 function parseDate(value: string) {
@@ -218,7 +228,7 @@ function buildDefaultAppointments(businessName: string): AppointmentItem[] {
   ];
 }
 
-function emptyAppointment(businessName: string, startsAt = "2026-05-27T09:00:00"): AppointmentItem {
+function emptyAppointment(businessName: string, startsAt = nextHourDateTime()): AppointmentItem {
   return {
     id: uid(),
     title: "New consultation",
@@ -238,7 +248,8 @@ function emptyAppointment(businessName: string, startsAt = "2026-05-27T09:00:00"
 export function PortalAppointmentsPage({ businessId = "" }: Props) {
   const portal = usePortalData(businessId);
   const businessName = portal.business?.name || "DeltaPrompt AI";
-  const [visibleMonth, setVisibleMonth] = useState(INITIAL_MONTH);
+  const today = useMemo(() => new Date(), []);
+  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()));
   const [viewMode, setViewMode] = useState<"month" | "list">("month");
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [activeAppointment, setActiveAppointment] = useState<AppointmentItem | null>(null);
@@ -376,7 +387,7 @@ export function PortalAppointmentsPage({ businessId = "" }: Props) {
               <button className="icon-button" type="button" onClick={() => moveMonth(1)} aria-label="Next month">
                 ›
               </button>
-              <button className="button-secondary calendar-today-button" type="button" onClick={() => setVisibleMonth(new Date(DEMO_TODAY.getFullYear(), DEMO_TODAY.getMonth(), 1))}>
+              <button className="button-secondary calendar-today-button" type="button" onClick={() => setVisibleMonth(startOfMonth(new Date()))}>
                 Today
               </button>
             </div>
@@ -410,7 +421,7 @@ export function PortalAppointmentsPage({ businessId = "" }: Props) {
                 {cells.map((cellDate) => {
                   const key = dateKey(cellDate);
                   const isOutsideMonth = cellDate.getMonth() !== visibleMonth.getMonth();
-                  const isToday = key === dateKey(DEMO_TODAY);
+                  const isToday = key === dateKey(today);
                   const dayEvents = eventsByDay[key] ?? [];
 
                   return (

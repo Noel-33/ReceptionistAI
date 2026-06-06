@@ -18,7 +18,8 @@ async function bootstrap() {
   app.useGlobalFilters(new ZodExceptionFilter());
 
   const port = Number(process.env.PORT ?? 4000);
-  const server = await app.listen(port);
+  const host = process.env.HOST ?? "0.0.0.0";
+  const server = await app.listen(port, host);
   const telephonyService = app.get(TelephonyService);
   const mediaSocketServer = new WebSocketServer({ noServer: true });
 
@@ -36,8 +37,8 @@ async function bootstrap() {
     });
   });
 
-  Logger.log(`API ready at http://localhost:${port}/api`, "Bootstrap");
-  Logger.log(`Twilio media bridge ready at ws://localhost:${port}/ws/twilio-media`, "Bootstrap");
+  Logger.log(`API ready on ${host}:${port}/api`, "Bootstrap");
+  Logger.log(`Twilio media bridge ready on ${host}:${port}/ws/twilio-media`, "Bootstrap");
 }
 
 void bootstrap();
